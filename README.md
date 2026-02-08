@@ -1,9 +1,9 @@
 # 數學大冒險(Math Advanture)
 
-## 檔案結構
+## Structure
 
 ```
-數學大冒險-pwa/
+Math Advanture - pwa
 ├── index.html      ← 遊戲本體
 ├── sw.js           ← Service Worker（Local cache）
 ├── manifest.json   ← PWA setting
