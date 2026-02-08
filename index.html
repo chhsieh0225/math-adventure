@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#1e1b4b"/>
+<meta name="description" content="打敗數學怪獸，成為數學大師！適合國小中年級的乘法與除法練習遊戲。"/>
+<title>數學大冒險</title>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<link rel="icon" type="image/png" href="icon-192.png"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Noto Sans TC',-apple-system,BlinkMacSystemFont,"PingFang TC","Heiti TC",sans-serif;overflow-x:hidden;-webkit-user-select:none;user-select:none}
+button{font-family:inherit;-webkit-tap-highlight-color:transparent}
+button:active{transform:scale(0.95)!important}
+html{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+@keyframes popIn{0%{transform:scale(0.8);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes fadeSlideIn{0%{transform:translateY(20px);opacity:0}100%{transform:translateY(0);opacity:1}}
+@keyframes timerPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes countdownPop{0%{transform:scale(0.3);opacity:0}50%{transform:scale(1.2);opacity:1}100%{transform:scale(1);opacity:1}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// Register Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+
+const LEVELS=[
+  {name:"初級探險家",color:"#22c55e",range:[2,5],ops:["×"],badge:"🌟",desc:"小數字乘法",monster:"🐛"},
+  {name:"進階冒險者",color:"#3b82f6",range:[3,9],ops:["×"],badge:"⭐",desc:"九九乘法表",monster:"🐉"},
+  {name:"除法新手",color:"#a855f7",range:[2,5],ops:["÷"],badge:"💎",desc:"基礎除法",monster:"👾"},
+  {name:"混合高手",color:"#f59e0b",range:[2,9],ops:["×","÷"],badge:"🏆",desc:"乘除混合",monster:"🤖"},
+  {name:"數學大師",color:"#ef4444",range:[3,12],ops:["×","÷"],badge:"👑",desc:"最終挑戰",monster:"🦖"},
+];
+const QPL={values:[6,8,10,12,15],labels:["6 題","8 題（標準）","10 題","12 題","15 題"],def:1};
+const TIMERS=[
+  {seconds:30,label:"30 秒",desc:"閃電戰",icon:"⚡"},
+  {seconds:60,label:"1 分鐘",desc:"標準賽",icon:"⏱️"},
+  {seconds:90,label:"1.5 分鐘",desc:"耐力賽",icon:"🏃"},
+  {seconds:120,label:"2 分鐘",desc:"馬拉松",icon:"🏅"},
+];
+const MAX_LB=20;const MEDALS=["🥇","🥈","🥉"];
+
+const store={
+  getName(){try{return localStorage.getItem("player-name")||"";}catch{return"";}},
+  setName(n){try{localStorage.setItem("player-name",n);}catch{}},
+  getScores(k){try{const d=localStorage.getItem(k);return d?JSON.parse(d):[];}catch{return[];}},
+  addScore(k,e){const l=this.getScores(k);l.push(e);l.sort((a,b)=>b.score-a.score);const t=l.slice(0,MAX_LB);try{localStorage.setItem(k,JSON.stringify(t));}catch{}return t;}
+};
+
+function gen(lv){
+  const{range,ops}=LEVELS[lv];const op=ops[Math.floor(Math.random()*ops.length)];
+  let a,b,ans,disp;
+  if(op==="×"){a=Math.floor(Math.random()*(range[1]-range[0]+1))+range[0];b=Math.floor(Math.random()*(range[1]-range[0]+1))+range[0];ans=a*b;disp=`${a} × ${b}`;}
+  else{b=Math.floor(Math.random()*(range[1]-range[0]+1))+range[0];ans=Math.floor(Math.random()*(range[1]-range[0]+1))+range[0];a=b*ans;disp=`${a} ÷ ${b}`;}
+  const ch=new Set([ans]);while(ch.size<4){const w=ans+Math.floor(Math.random()*10)-5;if(w>0&&w!==ans)ch.add(w);}
+  return{display:disp,answer:ans,choices:[...ch].sort(()=>Math.random()-0.5),op};
+}
+const fmtTime=s=>`${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
+const fmtDate=ts=>{const d=new Date(ts);return`${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${d.getMinutes().toString().padStart(2,"0")}`;};
+
+function FloatingEmoji({emoji,x,y,onDone}){const[op,setOp]=useState(1);const[py,setPy]=useState(y);useEffect(()=>{const t1=setTimeout(()=>{setOp(0);setPy(y-60);},50);const t2=setTimeout(onDone,800);return()=>{clearTimeout(t1);clearTimeout(t2);};},[]);return<div style={{position:"fixed",left:x,top:py,fontSize:"32px",opacity:op,transition:"all 0.7s ease-out",pointerEvents:"none",zIndex:999}}>{emoji}</div>;}
+function PBar({current,total,color}){return<div style={{width:"100%",height:12,background:"#e5e7eb",borderRadius:6,overflow:"hidden"}}><div style={{width:`${(current/total)*100}%`,height:"100%",background:`linear-gradient(90deg,${color},${color}dd)`,borderRadius:6,transition:"width 0.5s ease"}}/></div>;}
+function TBar({remaining,total}){const p=remaining/total;const c=p>0.5?"#22c55e":p>0.25?"#f59e0b":"#ef4444";return<div style={{width:"100%",height:14,background:"#e5e7eb",borderRadius:7,overflow:"hidden"}}><div style={{width:`${p*100}%`,height:"100%",background:`linear-gradient(90deg,${c},${c}cc)`,borderRadius:7,transition:"width 0.3s linear",animation:p<=0.25?"timerPulse 0.5s ease infinite":"none"}}/></div>;}
+function Monster({happy,hit}){const faces=["🐉","👾","🤖","👻","🦖"];const[face]=useState(faces[Math.floor(Math.random()*faces.length)]);return<div style={{fontSize:"80px",transition:"transform 0.3s ease",transform:hit?"scale(1.3) rotate(10deg)":happy?"scale(1.1)":"scale(1)",filter:hit?"hue-rotate(90deg)":"none",display:"inline-block"}}>{face}</div>;}
+function CD({onDone}){const[c,setC]=useState(3);useEffect(()=>{if(c===0){onDone();return;}const t=setTimeout(()=>setC(v=>v-1),700);return()=>clearTimeout(t);},[c]);return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}><div key={c} style={{fontSize:c===0?48:120,fontWeight:800,color:"white",animation:"countdownPop 0.5s ease",textShadow:"0 0 40px rgba(168,85,247,0.6)"}}>{c===0?"GO!":c}</div></div>;}
+function TabBtn({active,color,children,onClick}){return<button onClick={onClick} style={{background:active?color:"transparent",border:`2px solid ${active?color:"rgba(255,255,255,0.15)"}`,color:active?"white":"rgba(255,255,255,0.5)",fontSize:13,fontWeight:active?700:400,padding:"8px 16px",borderRadius:20,cursor:"pointer",transition:"all 0.2s"}}>{children}</button>;}
+
+function LBScreen({onBack}){
+  const[modeTab,setModeTab]=useState("adventure");
+  const data=store.getScores(`lb-${modeTab}`);
+  return(
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",padding:"24px 16px",paddingTop:"calc(24px + env(safe-area-inset-top))",background:"linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)",color:"white"}}>
+      <button onClick={onBack} style={{position:"absolute",top:"calc(16px + env(safe-area-inset-top))",left:16,background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:14,padding:"8px 16px",borderRadius:8,cursor:"pointer",opacity:0.7}}>← 返回</button>
+      <div style={{fontSize:40,marginTop:8}}>🏅</div>
+      <h2 style={{fontSize:24,fontWeight:800,marginBottom:4}}>我的排行榜</h2>
+      <p style={{fontSize:13,opacity:0.4,marginBottom:16}}>本機紀錄 · 前 {MAX_LB} 名</p>
+      <div style={{display:"flex",gap:8,marginBottom:20}}>
+        <TabBtn active={modeTab==="adventure"} color="#f59e0b" onClick={()=>setModeTab("adventure")}>⚔️ 冒險</TabBtn>
+        <TabBtn active={modeTab==="timed"} color="#a855f7" onClick={()=>setModeTab("timed")}>⏱️ 計時</TabBtn>
+      </div>
+      {data.length===0?(<div style={{textAlign:"center",opacity:0.5,marginTop:40}}><div style={{fontSize:48,marginBottom:12}}>📭</div><div>還沒有紀錄，快去挑戰吧！</div></div>):(
+        <div style={{width:"100%",maxWidth:420}}>{data.map((e,i)=>{const medal=i<3?MEDALS[i]:null;return<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",marginBottom:8,background:i<3?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.03)",borderRadius:14,border:`1px solid ${i<3?"rgba(255,255,255,0.12)":"rgba(255,255,255,0.05)"}`,animation:`fadeSlideIn 0.3s ease ${i*0.04}s both`}}>
+          <div style={{width:36,textAlign:"center",fontSize:medal?22:14,fontWeight:700,color:medal?"white":"rgba(255,255,255,0.4)",flexShrink:0}}>{medal||`#${i+1}`}</div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.name||"匿名"}</div><div style={{fontSize:11,opacity:0.4,display:"flex",gap:8}}><span>{LEVELS[e.level]?.badge} {LEVELS[e.level]?.name}</span>{e.mode==="timed"&&<span>· {fmtTime(e.timeLimit||60)}</span>}<span>· {fmtDate(e.ts)}</span></div></div>
+          <div style={{fontSize:20,fontWeight:800,color:i<3?"#f59e0b":"rgba(255,255,255,0.7)",flexShrink:0}}>{e.score}</div>
+        </div>;})}</div>
+      )}
+    </div>
+  );
+}
+
+function NameModal({onSubmit,onSkip,defaultName}){
+  const[name,setName]=useState(defaultName);const ref=useRef(null);
+  useEffect(()=>{if(ref.current)ref.current.focus();},[]);
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:1500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+    <div style={{background:"white",borderRadius:20,padding:28,maxWidth:340,width:"100%",textAlign:"center",animation:"popIn 0.3s ease"}}>
+      <div style={{fontSize:40,marginBottom:8}}>✏️</div>
+      <h3 style={{fontSize:20,fontWeight:800,marginBottom:4,color:"#1e293b"}}>輸入你的名字</h3>
+      <p style={{fontSize:13,opacity:0.5,marginBottom:16,color:"#64748b"}}>顯示在排行榜上</p>
+      <input ref={ref} value={name} onChange={e=>setName(e.target.value)} maxLength={12} placeholder="你的名字" onKeyDown={e=>{if(e.key==="Enter"&&name.trim())onSubmit(name.trim());}} style={{width:"100%",padding:"12px 16px",fontSize:18,fontWeight:600,border:"2px solid #e2e8f0",borderRadius:12,outline:"none",textAlign:"center",fontFamily:"inherit",marginBottom:16,color:"#1e293b",WebkitUserSelect:"text",userSelect:"text"}}/>
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={onSkip} style={{flex:1,background:"#f1f5f9",border:"none",color:"#64748b",fontSize:14,fontWeight:600,padding:"10px",borderRadius:12,cursor:"pointer"}}>跳過</button>
+        <button onClick={()=>{if(name.trim())onSubmit(name.trim());}} disabled={!name.trim()} style={{flex:2,background:name.trim()?"linear-gradient(135deg,#6366f1,#8b5cf6)":"#e2e8f0",border:"none",color:name.trim()?"white":"#94a3b8",fontSize:14,fontWeight:700,padding:"10px",borderRadius:12,cursor:name.trim()?"pointer":"default"}}>🏅 登錄排行榜</button>
+      </div>
+    </div>
+  </div>);
+}
+
+function LevelSelect({onSelect,onBack}){
+  const[sel,setSel]=useState(null);const[qIdx,setQIdx]=useState(QPL.def);
+  return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",padding:"32px 16px",paddingTop:"calc(32px + env(safe-area-inset-top))",background:"linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)",color:"white"}}>
+    <button onClick={onBack} style={{position:"absolute",top:"calc(16px + env(safe-area-inset-top))",left:16,background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:14,padding:"8px 16px",borderRadius:8,cursor:"pointer",opacity:0.7}}>← 返回</button>
+    <h2 style={{fontSize:26,fontWeight:800,marginBottom:4,marginTop:16}}>🗺️ 選擇關卡</h2>
+    <p style={{fontSize:14,opacity:0.6,marginBottom:24}}>點選關卡開始挑戰</p>
+    <div style={{width:"100%",maxWidth:400,display:"flex",flexDirection:"column",gap:12,marginBottom:28}}>
+      {LEVELS.map((lv,i)=>{const s=sel===i;return<div key={i} onClick={()=>setSel(i)} style={{background:s?`${lv.color}22`:"rgba(255,255,255,0.05)",border:`2px solid ${s?lv.color:"rgba(255,255,255,0.1)"}`,borderRadius:16,padding:"16px 20px",cursor:"pointer",transition:"all 0.25s ease",animation:`fadeSlideIn 0.4s ease ${i*0.08}s both`,transform:s?"scale(1.02)":"scale(1)",boxShadow:s?`0 4px 20px ${lv.color}33`:"none"}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <div style={{fontSize:36,width:56,height:56,display:"flex",alignItems:"center",justifyContent:"center",background:`${lv.color}22`,borderRadius:12}}>{lv.monster}</div>
+          <div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}><span style={{fontSize:18}}>{lv.badge}</span><span style={{fontSize:17,fontWeight:700,color:s?lv.color:"white"}}>{lv.name}</span></div><div style={{fontSize:13,opacity:0.6}}>{lv.desc}</div><div style={{fontSize:12,opacity:0.4,marginTop:2}}>{lv.ops.join(" · ")} ｜ {lv.range[0]}～{lv.range[1]}</div></div>
+          <div style={{width:24,height:24,borderRadius:12,border:`2px solid ${s?lv.color:"rgba(255,255,255,0.3)"}`,background:s?lv.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.2s",flexShrink:0}}>{s&&<span style={{color:"white",fontSize:14,fontWeight:700}}>✓</span>}</div>
+        </div>
+      </div>;})}
+    </div>
+    <div style={{width:"100%",maxWidth:400,background:"rgba(255,255,255,0.05)",borderRadius:16,padding:"16px 20px",marginBottom:24}}>
+      <div style={{fontSize:15,fontWeight:600,marginBottom:12,textAlign:"center"}}>⚙️ 每關題數</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>{QPL.labels.map((l,i)=><button key={i} onClick={()=>setQIdx(i)} style={{background:qIdx===i?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.05)",border:`1.5px solid ${qIdx===i?"#f59e0b":"rgba(255,255,255,0.1)"}`,color:qIdx===i?"#f59e0b":"rgba(255,255,255,0.6)",fontSize:12,fontWeight:qIdx===i?700:400,padding:"6px 12px",borderRadius:20,cursor:"pointer",transition:"all 0.2s"}}>{l}</button>)}</div>
+    </div>
+    {sel!==null&&<button onClick={()=>onSelect(sel,QPL.values[qIdx])} style={{background:`linear-gradient(135deg,${LEVELS[sel].color},${LEVELS[sel].color}bb)`,border:"none",color:"white",fontSize:18,fontWeight:700,padding:"14px 44px",borderRadius:50,cursor:"pointer",boxShadow:`0 4px 20px ${LEVELS[sel].color}44`,animation:"popIn 0.3s ease"}}>⚔️ 開始「{LEVELS[sel].name}」！</button>}
+  </div>);
+}
+
+function TimedSetup({onStart,onBack}){
+  const[sel,setSel]=useState(null);const[tIdx,setTIdx]=useState(1);
+  return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",padding:"32px 16px",paddingTop:"calc(32px + env(safe-area-inset-top))",background:"linear-gradient(135deg,#1a0a2e 0%,#2d1b69 50%,#1a0a2e 100%)",color:"white"}}>
+    <button onClick={onBack} style={{position:"absolute",top:"calc(16px + env(safe-area-inset-top))",left:16,background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:14,padding:"8px 16px",borderRadius:8,cursor:"pointer",opacity:0.7}}>← 返回</button>
+    <div style={{fontSize:48,marginBottom:4,marginTop:8}}>⏱️</div>
+    <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>計時挑戰</h2>
+    <p style={{fontSize:14,opacity:0.6,marginBottom:24}}>在時間內答對越多題越好！</p>
+    <div style={{width:"100%",maxWidth:400,marginBottom:20}}>
+      <div style={{fontSize:15,fontWeight:600,marginBottom:10,textAlign:"center"}}>📐 題目範圍</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {LEVELS.map((lv,i)=>{const s=sel===i;return<div key={i} onClick={()=>setSel(i)} style={{background:s?`${lv.color}22`:"rgba(255,255,255,0.05)",border:`2px solid ${s?lv.color:"rgba(255,255,255,0.1)"}`,borderRadius:14,padding:"12px 16px",cursor:"pointer",transition:"all 0.25s ease",animation:`fadeSlideIn 0.4s ease ${i*0.06}s both`}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}><span style={{fontSize:24}}>{lv.badge}</span><div style={{flex:1}}><span style={{fontSize:15,fontWeight:700,color:s?lv.color:"white"}}>{lv.name}</span><span style={{fontSize:12,opacity:0.5,marginLeft:8}}>{lv.ops.join(" · ")} ({lv.range[0]}～{lv.range[1]})</span></div>
+          <div style={{width:22,height:22,borderRadius:11,border:`2px solid ${s?lv.color:"rgba(255,255,255,0.3)"}`,background:s?lv.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.2s",flexShrink:0}}>{s&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}</div></div>
+        </div>;})}
+      </div>
+    </div>
+    <div style={{width:"100%",maxWidth:400,marginBottom:20}}>
+      <div style={{fontSize:15,fontWeight:600,marginBottom:10,textAlign:"center"}}>⏰ 時間限制</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {TIMERS.map((o,i)=>{const s=tIdx===i;return<div key={i} onClick={()=>setTIdx(i)} style={{background:s?"rgba(168,85,247,0.2)":"rgba(255,255,255,0.05)",border:`2px solid ${s?"#a855f7":"rgba(255,255,255,0.1)"}`,borderRadius:14,padding:"14px 12px",cursor:"pointer",transition:"all 0.25s ease",textAlign:"center"}}><div style={{fontSize:24,marginBottom:4}}>{o.icon}</div><div style={{fontSize:16,fontWeight:700,color:s?"#a855f7":"white"}}>{o.label}</div><div style={{fontSize:12,opacity:0.5}}>{o.desc}</div></div>;})}
+      </div>
+    </div>
+    <div style={{width:"100%",maxWidth:400,background:"rgba(255,255,255,0.05)",borderRadius:14,padding:"14px 18px",marginBottom:24}}><div style={{fontSize:13,opacity:0.7,lineHeight:1.9,textAlign:"center"}}><div>✅ 答對 +10 分 ｜ 🔥 連續答對 +20</div><div>❌ 答錯 −5 分 ｜ ⏱️ 時間到就結束</div></div></div>
+    {sel!==null&&<button onClick={()=>onStart(sel,TIMERS[tIdx].seconds)} style={{background:"linear-gradient(135deg,#a855f7,#6366f1)",border:"none",color:"white",fontSize:18,fontWeight:700,padding:"14px 44px",borderRadius:50,cursor:"pointer",boxShadow:"0 4px 20px rgba(168,85,247,0.4)",animation:"popIn 0.3s ease"}}>⏱️ 開始計時挑戰！</button>}
+  </div>);
+}
+
+function App(){
+  const[screen,setScreen]=useState("intro");const[gm,setGm]=useState("adventure");
+  const[level,setLevel]=useState(0);const[startLv,setStartLv]=useState(0);
+  const[prob,setProb]=useState(null);const[score,setScore]=useState(0);
+  const[streak,setStreak]=useState(0);const[hp,setHp]=useState(5);
+  const[solved,setSolved]=useState(0);const[fb,setFb]=useState(null);
+  const[floats,setFloats]=useState([]);const[shake,setShake]=useState(false);
+  const[mHappy,setMH]=useState(false);const[mHit,setMHit]=useState(false);
+  const[tc,setTc]=useState(0);const[tw,setTw]=useState(0);const[qpl,setQpl]=useState(8);
+  const fid=useRef(0);
+  const[tLimit,setTLimit]=useState(60);const[tLeft,setTLeft]=useState(60);
+  const[tRun,setTRun]=useState(false);const[showCD,setShowCD]=useState(false);const tRef=useRef(null);
+  const[showName,setShowName]=useState(false);const[pName,setPName]=useState(()=>store.getName());
+  const[saved,setSaved]=useState(false);const[saveStatus,setSaveStatus]=useState("");
+
+  useEffect(()=>{if(screen==="game"&&!prob)setProb(gen(level));},[screen,prob,level]);
+  useEffect(()=>{if(tRun&&gm==="timed"){tRef.current=setInterval(()=>{setTLeft(t=>{if(t<=1){clearInterval(tRef.current);setTRun(false);setScreen("timedResult");return 0;}return t-1;});},1000);return()=>clearInterval(tRef.current);}},[tRun,gm]);
+
+  const addF=(e,x,y)=>{const id=fid.current++;setFloats(f=>[...f,{id,emoji:e,x,y}]);};
+  const rmF=id=>setFloats(f=>f.filter(v=>v.id!==id));
+
+  const onAns=(ch,e)=>{if(fb)return;const ok=ch===prob.answer;const r=e.target.getBoundingClientRect();if(ok){const b=streak>=2?20:10;setScore(s=>s+b);setStreak(s=>s+1);setTc(c=>c+1);setMHit(true);addF(streak>=2?"🔥":"✅",r.left+40,r.top);setTimeout(()=>setMHit(false),400);const ns=solved+1;setSolved(ns);setFb({correct:true});setTimeout(()=>{if(ns>=qpl){if(level<LEVELS.length-1)setScreen("levelUp");else setScreen("gameOver");setSolved(0);}setFb(null);setProb(gen(level+(ns>=qpl&&level<LEVELS.length-1?1:0)));},800);}else{setHp(h=>h-1);setStreak(0);setTw(w=>w+1);setShake(true);setMH(true);addF("❌",r.left+40,r.top);setTimeout(()=>{setShake(false);setMH(false);},500);setFb({correct:false,answer:prob.answer});if(hp<=1)setTimeout(()=>setScreen("gameOver"),1200);else setTimeout(()=>{setFb(null);setProb(gen(level));},1500);}};
+  const onTAns=(ch,e)=>{if(fb||!tRun)return;const ok=ch===prob.answer;const r=e.target.getBoundingClientRect();if(ok){const b=streak>=2?20:10;setScore(s=>s+b);setStreak(s=>s+1);setTc(c=>c+1);setMHit(true);addF(streak>=2?"🔥":"✅",r.left+40,r.top);setTimeout(()=>setMHit(false),400);setFb({correct:true});setTimeout(()=>{setFb(null);setProb(gen(level));},500);}else{setScore(s=>Math.max(0,s-5));setStreak(0);setTw(w=>w+1);setShake(true);setMH(true);addF("❌",r.left+40,r.top);setTimeout(()=>{setShake(false);setMH(false);},500);setFb({correct:false,answer:prob.answer});setTimeout(()=>{setFb(null);setProb(gen(level));},1000);}};
+
+  const resetC=()=>{setScore(0);setStreak(0);setTc(0);setTw(0);setProb(null);setFb(null);setFloats([]);setSaved(false);setSaveStatus("");};
+  const resetG=(lv,q)=>{resetC();setGm("adventure");setLevel(lv);setStartLv(lv);setHp(5);setSolved(0);setQpl(q);setScreen("game");};
+  const startT=(lv,sec)=>{resetC();setGm("timed");setLevel(lv);setStartLv(lv);setTLimit(sec);setTLeft(sec);setTRun(false);setShowCD(true);setScreen("game");};
+  const onCDDone=()=>{setShowCD(false);setTRun(true);setProb(gen(level));};
+  const goNext=()=>{setLevel(l=>l+1);setScreen("game");setProb(null);setHp(h=>Math.min(h+2,5));};
+
+  const saveScore=(name)=>{const fn=name||pName||"匿名";if(name){setPName(name);store.setName(name);}setShowName(false);const entry={name:fn,score,level:startLv,mode:gm,correct:tc,wrong:tw,ts:Date.now()};if(gm==="timed")entry.timeLimit=tLimit;store.addScore(`lb-${gm}`,entry);setSaveStatus("saved");setSaved(true);};
+  const handleSave=()=>{if(pName)saveScore(pName);else setShowName(true);};
+  const cl=LEVELS[level];
+
+  if(screen==="intro")return(
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e1b4b 100%)",color:"white"}}>
+      <div style={{fontSize:64,marginBottom:8}}>🧮</div>
+      <h1 style={{fontSize:36,fontWeight:800,marginBottom:4,textAlign:"center"}}>數學大冒險</h1>
+      <p style={{fontSize:16,opacity:0.8,marginBottom:28,textAlign:"center"}}>打敗數學怪獸，成為數學大師！</p>
+      <div style={{display:"flex",gap:12,width:"100%",maxWidth:400,marginBottom:12}}>
+        <div onClick={()=>resetG(0,8)} style={{flex:1,background:"rgba(245,158,11,0.1)",border:"2px solid rgba(245,158,11,0.3)",borderRadius:20,padding:"24px 16px",cursor:"pointer",textAlign:"center",transition:"all 0.25s ease"}}><div style={{fontSize:40,marginBottom:8}}>⚔️</div><div style={{fontSize:18,fontWeight:800,marginBottom:4}}>冒險模式</div><div style={{fontSize:12,opacity:0.6,lineHeight:1.6}}>五個關卡由易到難<br/>答錯扣命，挑戰全破</div></div>
+        <div onClick={()=>setScreen("timedSetup")} style={{flex:1,background:"rgba(168,85,247,0.1)",border:"2px solid rgba(168,85,247,0.3)",borderRadius:20,padding:"24px 16px",cursor:"pointer",textAlign:"center",transition:"all 0.25s ease"}}><div style={{fontSize:40,marginBottom:8}}>⏱️</div><div style={{fontSize:18,fontWeight:800,marginBottom:4}}>計時模式</div><div style={{fontSize:12,opacity:0.6,lineHeight:1.6}}>限時內答越多越好<br/>和時間賽跑！</div></div>
+      </div>
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={()=>setScreen("select")} style={{background:"rgba(255,255,255,0.08)",border:"1.5px solid rgba(255,255,255,0.2)",color:"rgba(255,255,255,0.7)",fontSize:14,fontWeight:600,padding:"10px 20px",borderRadius:50,cursor:"pointer"}}>🗺️ 自選關卡</button>
+        <button onClick={()=>setScreen("lb")} style={{background:"rgba(255,255,255,0.08)",border:"1.5px solid rgba(255,255,255,0.2)",color:"rgba(255,255,255,0.7)",fontSize:14,fontWeight:600,padding:"10px 20px",borderRadius:50,cursor:"pointer"}}>🏅 排行榜</button>
+      </div>
+      <div style={{marginTop:36,textAlign:"center",opacity:0.4,fontSize:12,lineHeight:1.8}}><div>設計：Chung-Han Hsieh</div><div>程式實作：由 Claude (Anthropic) 協助生成</div></div>
+    </div>
+  );
+
+  if(screen==="lb")return<LBScreen onBack={()=>setScreen("intro")}/>;
+  if(screen==="timedSetup")return<TimedSetup onStart={(l,s)=>startT(l,s)} onBack={()=>setScreen("intro")}/>;
+  if(screen==="select")return<LevelSelect onSelect={(l,q)=>resetG(l,q)} onBack={()=>setScreen("intro")}/>;
+
+  if(screen==="levelUp"){const nx=LEVELS[level+1];return(
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:`linear-gradient(135deg,${cl.color}22,${cl.color}44)`,color:"#1e293b"}}>
+      <div style={{fontSize:72,marginBottom:8}}>{cl.badge}</div><h2 style={{fontSize:28,fontWeight:800,marginBottom:8}}>恭喜過關！</h2>
+      <p style={{fontSize:18,opacity:0.7,marginBottom:8}}>你完成了「{cl.name}」！</p>
+      <p style={{fontSize:24,fontWeight:700,color:cl.color,marginBottom:32}}>目前分數：{score}</p>
+      <div style={{background:"white",borderRadius:16,padding:20,marginBottom:24,boxShadow:"0 4px 16px rgba(0,0,0,0.1)",textAlign:"center"}}><p style={{fontSize:16,marginBottom:4}}>下一關</p><p style={{fontSize:22,fontWeight:700,color:nx.color}}>{nx.badge} {nx.name}</p><p style={{fontSize:14,opacity:0.6}}>{nx.ops.join(" 和 ")} · 數字 {nx.range[0]}~{nx.range[1]}</p></div>
+      <p style={{fontSize:14,opacity:0.6,marginBottom:16}}>❤️ +2 生命恢復！</p>
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center"}}><button onClick={goNext} style={{background:`linear-gradient(135deg,${nx.color},${nx.color}cc)`,border:"none",color:"white",fontSize:18,fontWeight:700,padding:"12px 36px",borderRadius:50,cursor:"pointer"}}>⚔️ 繼續挑戰！</button><button onClick={()=>setScreen("select")} style={{background:"white",border:"2px solid #cbd5e1",color:"#64748b",fontSize:14,fontWeight:600,padding:"10px 24px",borderRadius:50,cursor:"pointer"}}>🗺️ 換關卡</button></div>
+    </div>);}
+
+  if(screen==="gameOver"){const won=hp>0;return(
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:won?"linear-gradient(135deg,#fef3c7,#fde68a)":"linear-gradient(135deg,#fee2e2,#fecaca)",color:"#1e293b"}}>
+      {showName&&<NameModal defaultName={pName} onSubmit={n=>saveScore(n)} onSkip={()=>{setShowName(false);saveScore("匿名");}}/>}
+      <div style={{fontSize:72,marginBottom:8}}>{won?"👑":"💀"}</div>
+      <h2 style={{fontSize:28,fontWeight:800,marginBottom:8}}>{won?"恭喜！你成為數學大師！":"遊戲結束"}</h2>
+      <div style={{background:"white",borderRadius:16,padding:24,marginBottom:16,boxShadow:"0 4px 16px rgba(0,0,0,0.08)",minWidth:240,textAlign:"center"}}><div style={{fontSize:36,fontWeight:800,color:"#f59e0b",marginBottom:12}}>{score} 分</div><div style={{fontSize:14,opacity:0.7,lineHeight:2}}><div>✅ 答對：{tc} 題</div><div>❌ 答錯：{tw} 題</div><div>📊 正確率：{tc+tw>0?Math.round(tc/(tc+tw)*100):0}%</div><div>🗺️ 到達：{cl.badge} {cl.name}</div></div></div>
+      {!saved&&score>0&&<button onClick={handleSave} style={{background:"linear-gradient(135deg,#f59e0b,#ef4444)",border:"none",color:"white",fontSize:15,fontWeight:700,padding:"10px 28px",borderRadius:50,cursor:"pointer",marginBottom:12,animation:"popIn 0.3s ease"}}>🏅 登錄排行榜</button>}
+      {saveStatus==="saved"&&<div style={{fontSize:13,color:"#22c55e",marginBottom:12,animation:"popIn 0.3s ease"}}>✅ 已登錄排行榜！</div>}
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}><button onClick={()=>resetG(startLv,qpl)} style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",color:"white",fontSize:15,fontWeight:700,padding:"10px 28px",borderRadius:50,cursor:"pointer"}}>🔄 再玩一次</button><button onClick={()=>setScreen("lb")} style={{background:"white",border:"2px solid #fbbf24",color:"#b45309",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>🏅 排行榜</button><button onClick={()=>setScreen("intro")} style={{background:"white",border:"2px solid #cbd5e1",color:"#64748b",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>🏠 主選單</button></div>
+    </div>);}
+
+  if(screen==="timedResult"){const tot=tc+tw;const acc=tot>0?Math.round(tc/tot*100):0;const spd=tc>0?(tLimit/tc).toFixed(1):"—";let g="🌱";if(tc>=20)g="👑";else if(tc>=15)g="🏆";else if(tc>=10)g="⭐";else if(tc>=5)g="🌟";return(
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",color:"#1e293b"}}>
+      {showName&&<NameModal defaultName={pName} onSubmit={n=>saveScore(n)} onSkip={()=>{setShowName(false);saveScore("匿名");}}/>}
+      <div style={{fontSize:72,marginBottom:8}}>⏱️</div><h2 style={{fontSize:28,fontWeight:800,marginBottom:4}}>時間到！</h2>
+      <p style={{fontSize:16,opacity:0.6,marginBottom:20}}>{cl.badge} {cl.name} · {fmtTime(tLimit)}</p>
+      <div style={{background:"white",borderRadius:16,padding:24,marginBottom:16,boxShadow:"0 4px 16px rgba(0,0,0,0.08)",minWidth:280,textAlign:"center"}}><div style={{fontSize:48,marginBottom:4}}>{g}</div><div style={{fontSize:36,fontWeight:800,color:"#a855f7",marginBottom:16}}>{score} 分</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,fontSize:14,opacity:0.7}}><div style={{background:"#f0fdf4",borderRadius:10,padding:10}}><div style={{fontSize:24,fontWeight:800,color:"#22c55e"}}>{tc}</div><div>答對</div></div><div style={{background:"#fef2f2",borderRadius:10,padding:10}}><div style={{fontSize:24,fontWeight:800,color:"#ef4444"}}>{tw}</div><div>答錯</div></div><div style={{background:"#eff6ff",borderRadius:10,padding:10}}><div style={{fontSize:24,fontWeight:800,color:"#3b82f6"}}>{acc}%</div><div>正確率</div></div><div style={{background:"#faf5ff",borderRadius:10,padding:10}}><div style={{fontSize:24,fontWeight:800,color:"#a855f7"}}>{spd}s</div><div>平均速度</div></div></div>
+      </div>
+      {!saved&&score>0&&<button onClick={handleSave} style={{background:"linear-gradient(135deg,#a855f7,#6366f1)",border:"none",color:"white",fontSize:15,fontWeight:700,padding:"10px 28px",borderRadius:50,cursor:"pointer",marginBottom:12,animation:"popIn 0.3s ease"}}>🏅 登錄排行榜</button>}
+      {saveStatus==="saved"&&<div style={{fontSize:13,color:"#22c55e",marginBottom:12,animation:"popIn 0.3s ease"}}>✅ 已登錄排行榜！</div>}
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}><button onClick={()=>startT(startLv,tLimit)} style={{background:"linear-gradient(135deg,#a855f7,#6366f1)",border:"none",color:"white",fontSize:15,fontWeight:700,padding:"10px 28px",borderRadius:50,cursor:"pointer"}}>🔄 再挑戰</button><button onClick={()=>setScreen("lb")} style={{background:"white",border:"2px solid #c4b5fd",color:"#7c3aed",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>🏅 排行榜</button><button onClick={()=>setScreen("timedSetup")} style={{background:"white",border:"2px solid #ddd6fe",color:"#7c3aed",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>⚙️ 設定</button><button onClick={()=>setScreen("intro")} style={{background:"white",border:"2px solid #cbd5e1",color:"#64748b",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>🏠 主選單</button></div>
+    </div>);}
+
+  if(!prob&&!showCD)return null;
+  const isTimed=gm==="timed";const hc=isTimed?onTAns:onAns;
+  return(
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",padding:"16px 16px 32px",paddingTop:"calc(16px + env(safe-area-inset-top))",background:isTimed?"linear-gradient(180deg,#faf5ff 0%,#ede9fe 100%)":"linear-gradient(180deg,#f8fafc 0%,#e2e8f0 100%)",animation:shake?"shake 0.4s ease":"none"}}>
+      {showCD&&<CD onDone={onCDDone}/>}
+      {floats.map(f=><FloatingEmoji key={f.id} emoji={f.emoji} x={f.x} y={f.y} onDone={()=>rmF(f.id)}/>)}
+      <div style={{width:"100%",maxWidth:400,display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}><button onClick={()=>{if(isTimed){clearInterval(tRef.current);setTRun(false);}setScreen("intro");}} style={{background:"rgba(0,0,0,0.05)",border:"none",fontSize:12,padding:"4px 10px",borderRadius:6,cursor:"pointer",color:"#64748b"}}>🏠</button><span style={{fontSize:14,fontWeight:600,color:cl.color}}>{isTimed?"⏱️":cl.badge} {cl.name}</span></div>
+        <div style={{fontSize:14,fontWeight:700,color:isTimed?"#a855f7":"#f59e0b"}}>⭐ {score}</div>
+      </div>
+      <div style={{width:"100%",maxWidth:400,marginBottom:4}}>{isTimed?<TBar remaining={tLeft} total={tLimit}/>:<PBar current={solved} total={qpl} color={cl.color}/>}</div>
+      <div style={{width:"100%",maxWidth:400,display:"flex",justifyContent:"space-between",fontSize:12,opacity:0.5,marginBottom:16}}>
+        {isTimed?(<><span style={{fontSize:16,fontWeight:700,color:tLeft<=10?"#ef4444":"#64748b",animation:tLeft<=10?"timerPulse 0.5s ease infinite":"none"}}>{fmtTime(tLeft)}</span><span>✅ {tc} ❌ {tw}</span></>):(<><span>{solved}/{qpl}</span><span>{"❤️".repeat(hp)}{"🖤".repeat(5-hp)}</span></>)}
+      </div>
+      {streak>=2&&<div style={{background:"linear-gradient(135deg,#f59e0b,#ef4444)",color:"white",padding:"4px 16px",borderRadius:20,fontSize:13,fontWeight:700,marginBottom:12,animation:"popIn 0.3s ease"}}>🔥 連續答對 {streak} 題！{isTimed?"+20":"雙倍得分！"}</div>}
+      <div style={{marginBottom:16}}><Monster happy={mHappy} hit={mHit}/></div>
+      {prob&&(<>
+        <div style={{background:"white",borderRadius:20,padding:"24px 40px",boxShadow:"0 8px 32px rgba(0,0,0,0.08)",marginBottom:24,minWidth:240,textAlign:"center",border:`3px solid ${isTimed?"#a855f733":cl.color+"33"}`}}><div style={{fontSize:14,opacity:0.5,marginBottom:8}}>{prob.op==="×"?"乘法題":"除法題"}</div><div style={{fontSize:42,fontWeight:800,color:"#1e293b",letterSpacing:2}}>{prob.display} = ?</div></div>
+        {fb&&<div style={{marginBottom:12,fontSize:16,fontWeight:700,color:fb.correct?"#22c55e":"#ef4444",animation:"popIn 0.3s ease"}}>{fb.correct?"✅ 答對了！":`❌ 正確答案是 ${fb.answer}`}</div>}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,width:"100%",maxWidth:320}}>
+          {prob.choices.map((c,i)=>{let bg="white",bd="#e2e8f0",co="#1e293b";if(fb){if(c===prob.answer){bg="#dcfce7";bd="#22c55e";co="#166534";}else if(!fb.correct){bg="#f1f5f9";co="#94a3b8";}}return<button key={i} onClick={e=>hc(c,e)} disabled={!!fb} style={{background:bg,border:`2px solid ${bd}`,borderRadius:14,padding:"16px 8px",fontSize:26,fontWeight:700,color:co,cursor:fb?"default":"pointer",transition:"all 0.2s",boxShadow:fb?"none":"0 2px 8px rgba(0,0,0,0.06)"}}>{c}</button>;})}
+        </div>
+      </>)}
+    </div>
+  );
+}
+
+ReactDOM.render(<App/>,document.getElementById("root"));
+</script>
+</body>
+</html>
