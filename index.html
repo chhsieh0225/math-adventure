@@ -205,6 +205,8 @@ function App(){
 
   const saveScore=(name)=>{const fn=name||pName||"匿名";if(name){setPName(name);store.setName(name);}setShowName(false);const entry={name:fn,score,level:startLv,mode:gm,correct:tc,wrong:tw,ts:Date.now()};if(gm==="timed")entry.timeLimit=tLimit;store.addScore(`lb-${gm}`,entry);setSaveStatus("saved");setSaved(true);};
   const handleSave=()=>{if(pName)saveScore(pName);else setShowName(true);};
+
+  useEffect(()=>{if((screen==="gameOver"||screen==="timedResult")&&score>0&&!saved){if(pName){saveScore(pName);}else{setShowName(true);}};},[screen]);
   const cl=LEVELS[level];
 
   if(screen==="intro")return(
@@ -244,8 +246,7 @@ function App(){
       <div style={{fontSize:72,marginBottom:8}}>{won?"👑":"💀"}</div>
       <h2 style={{fontSize:28,fontWeight:800,marginBottom:8}}>{won?"恭喜！你成為數學大師！":"遊戲結束"}</h2>
       <div style={{background:"white",borderRadius:16,padding:24,marginBottom:16,boxShadow:"0 4px 16px rgba(0,0,0,0.08)",minWidth:240,textAlign:"center"}}><div style={{fontSize:36,fontWeight:800,color:"#f59e0b",marginBottom:12}}>{score} 分</div><div style={{fontSize:14,opacity:0.7,lineHeight:2}}><div>✅ 答對：{tc} 題</div><div>❌ 答錯：{tw} 題</div><div>📊 正確率：{tc+tw>0?Math.round(tc/(tc+tw)*100):0}%</div><div>🗺️ 到達：{cl.badge} {cl.name}</div></div></div>
-      {!saved&&score>0&&<button onClick={handleSave} style={{background:"linear-gradient(135deg,#f59e0b,#ef4444)",border:"none",color:"white",fontSize:15,fontWeight:700,padding:"10px 28px",borderRadius:50,cursor:"pointer",marginBottom:12,animation:"popIn 0.3s ease"}}>🏅 登錄排行榜</button>}
-      {saveStatus==="saved"&&<div style={{fontSize:13,color:"#22c55e",marginBottom:12,animation:"popIn 0.3s ease"}}>✅ 已登錄排行榜！</div>}
+      {saved&&<div style={{fontSize:13,color:"#22c55e",marginBottom:12,animation:"popIn 0.3s ease"}}>✅ 已自動登錄排行榜！</div>}
       <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}><button onClick={()=>resetG(startLv,qpl)} style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",color:"white",fontSize:15,fontWeight:700,padding:"10px 28px",borderRadius:50,cursor:"pointer"}}>🔄 再玩一次</button><button onClick={()=>setScreen("lb")} style={{background:"white",border:"2px solid #fbbf24",color:"#b45309",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>🏅 排行榜</button><button onClick={()=>setScreen("intro")} style={{background:"white",border:"2px solid #cbd5e1",color:"#64748b",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>🏠 主選單</button></div>
     </div>);}
 
@@ -257,8 +258,7 @@ function App(){
       <div style={{background:"white",borderRadius:16,padding:24,marginBottom:16,boxShadow:"0 4px 16px rgba(0,0,0,0.08)",minWidth:280,textAlign:"center"}}><div style={{fontSize:48,marginBottom:4}}>{g}</div><div style={{fontSize:36,fontWeight:800,color:"#a855f7",marginBottom:16}}>{score} 分</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,fontSize:14,opacity:0.7}}><div style={{background:"#f0fdf4",borderRadius:10,padding:10}}><div style={{fontSize:24,fontWeight:800,color:"#22c55e"}}>{tc}</div><div>答對</div></div><div style={{background:"#fef2f2",borderRadius:10,padding:10}}><div style={{fontSize:24,fontWeight:800,color:"#ef4444"}}>{tw}</div><div>答錯</div></div><div style={{background:"#eff6ff",borderRadius:10,padding:10}}><div style={{fontSize:24,fontWeight:800,color:"#3b82f6"}}>{acc}%</div><div>正確率</div></div><div style={{background:"#faf5ff",borderRadius:10,padding:10}}><div style={{fontSize:24,fontWeight:800,color:"#a855f7"}}>{spd}s</div><div>平均速度</div></div></div>
       </div>
-      {!saved&&score>0&&<button onClick={handleSave} style={{background:"linear-gradient(135deg,#a855f7,#6366f1)",border:"none",color:"white",fontSize:15,fontWeight:700,padding:"10px 28px",borderRadius:50,cursor:"pointer",marginBottom:12,animation:"popIn 0.3s ease"}}>🏅 登錄排行榜</button>}
-      {saveStatus==="saved"&&<div style={{fontSize:13,color:"#22c55e",marginBottom:12,animation:"popIn 0.3s ease"}}>✅ 已登錄排行榜！</div>}
+      {saved&&<div style={{fontSize:13,color:"#22c55e",marginBottom:12,animation:"popIn 0.3s ease"}}>✅ 已自動登錄排行榜！</div>}
       <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}><button onClick={()=>startT(startLv,tLimit)} style={{background:"linear-gradient(135deg,#a855f7,#6366f1)",border:"none",color:"white",fontSize:15,fontWeight:700,padding:"10px 28px",borderRadius:50,cursor:"pointer"}}>🔄 再挑戰</button><button onClick={()=>setScreen("lb")} style={{background:"white",border:"2px solid #c4b5fd",color:"#7c3aed",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>🏅 排行榜</button><button onClick={()=>setScreen("timedSetup")} style={{background:"white",border:"2px solid #ddd6fe",color:"#7c3aed",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>⚙️ 設定</button><button onClick={()=>setScreen("intro")} style={{background:"white",border:"2px solid #cbd5e1",color:"#64748b",fontSize:13,fontWeight:600,padding:"9px 20px",borderRadius:50,cursor:"pointer"}}>🏠 主選單</button></div>
     </div>);}
 
