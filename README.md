@@ -12,44 +12,6 @@
 └── README.md       ← 本文件
 ```
 
-## 部署到 GitHub Pages（免費）
-
-### 第一次設定
-
-1. 在 GitHub 建立新 Repository
-   - 到 https://github.com/new
-   - 名稱例如 `math-adventure`
-   - 設為 Public
-   - 點 Create repository
-
-2. 上傳檔案
-   ```bash
-   cd 數學大冒險-pwa
-   git init
-   git add .
-   git commit -m "初版"
-   git branch -M main
-   git remote add origin https://github.com/你的帳號/math-adventure.git
-   git push -u origin main
-   ```
-
-3. 啟用 GitHub Pages
-   - 到 Repository → Settings → Pages
-   - Source 選 「Deploy from a branch」
-   - Branch 選 `main`，資料夾選 `/ (root)`
-   - 點 Save
-
-4. 等 1-2 分鐘，你的遊戲就上線了：
-   **https://你的帳號.github.io/math-adventure/**
-
-### 更新版本
-
-修改檔案後：
-```bash
-git add .
-git commit -m "更新內容"
-git push
-```
 
 如果遊戲內容有改（index.html），記得也更新 sw.js 裡的版本號：
 ```javascript
